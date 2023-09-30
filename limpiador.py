@@ -1,3 +1,6 @@
+# este programa toma el nombre de un archio excel, le quita ñ y tildes y 
+# lo inserta en mysql como tabla.
+
 import pandas as pd
 from unidecode import unidecode
 import pymysql
@@ -5,12 +8,13 @@ import mysql.connector
 
 
 # Nombre del archivo Excel de entrada y hoja
-nombre = 'icfes'
-archivo_excel = nombre + '.xlsx'
+nombre = 'EstudiantesSinCredito'
+archivo_excel = 'data_original/' + nombre + '.xlsx'
 hoja_excel = 'Exportar Hoja de Trabajo'
 
 # Leer el archivo Excel en un DataFrame
 df = pd.read_excel(archivo_excel)
+print(df.shape)
 
 # Función para reemplazar tildes y "ñ" en un texto
 def reemplazar_tildes_y_ñ(texto):
