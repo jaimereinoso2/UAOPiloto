@@ -8,7 +8,7 @@ import mysql.connector
 
 
 # Nombre del archivo Excel de entrada y hoja
-nombre = 'EstudiantesSinCredito'
+nombre = 'EstudiantesSemestre'
 archivo_excel = 'data_original/' + nombre + '.xlsx'
 hoja_excel = 'Exportar Hoja de Trabajo'
 
