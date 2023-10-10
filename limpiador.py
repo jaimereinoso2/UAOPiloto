@@ -8,9 +8,9 @@ import mysql.connector
 
 
 # Nombre del archivo Excel de entrada y hoja
-nombre = 'EstudiantesSemestre'
-archivo_excel = 'data_original/' + nombre + '.xlsx'
-hoja_excel = 'Exportar Hoja de Trabajo'
+nombre = 'periodosRegulares'
+archivo_excel = 'data/' + nombre + '.xlsx'
+hoja_excel = 'Hoja1'
 
 # Leer el archivo Excel en un DataFrame
 df = pd.read_excel(archivo_excel)
