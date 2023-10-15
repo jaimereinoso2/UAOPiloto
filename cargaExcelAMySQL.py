@@ -8,7 +8,7 @@ import mysql.connector
 
 
 # Nombre del archivo Excel de entrada y hoja
-nombre = 'periodosRegulares'
+nombre = 'actividades'
 archivo_excel = 'data/' + nombre + '.xlsx'
 hoja_excel = 'Hoja1'
 

@@ -338,7 +338,8 @@ where definitiva < 3;
 
 update estudianteasignatura
 set nivel_nota = 2
-where definitiva < 3.8;
+where definitiva >= 3.0
+and   definitiva < 3.8;
 -- R/ 1103 notas cambiadas
 
 update estudianteasignatura
@@ -348,18 +349,39 @@ where definitiva >= 3.8;
 commit;
 
 
-
-
-
-
-
-
 -- Al comparar lo que se quiere hacer con lo que hay en definitiva_alf se observa que esta ultima solo detecta el nulo según si fue nula, A, P, y R (preguntar qué es eso).
 -- y si sí hay nota, detecta solo si es menor a 3 o mayor a 3.
 -- NIVEL_NOTA nos permitirá entender mejor si sacó una muy buena nota, regular o malita, o no tuvo nota.
 select distinct definitiva, definitiva_alf
 from estudianteasignatura
 order by definitiva, definitiva_alf;
+
+
+ SELECT  id_estudiante, IFNULL(icfes_antiguo,-100) icfes_antiguo, IFNULL(biologia,-100) biologia, IFNULL(matematica,-100) matematica, 
+			IFNULL(filosofia,-100) filosofia, 
+            IFNULL(fisica,-100) fisica, IFNULL(historia,-100) historia, IFNULL(quimica,-100) quimica, IFNULL(lenguaje,-100) lenguaje, 
+            IFNULL(geografia,-100) geografia, IFNULL(idioma,-100) idioma, IFNULL(interdisciplinar,-100) interdisciplinar
+ FROM icfes;
+ 
+ -- CURSOS EXTRACURRICULARES (EstudiantesActividadeS=
+ -- esa tabla usa es la identificación del estudiante y no su codigo, parece.
+ -- Antes de iniciar, creé la tabla actividades con el nobmre de la actividad y su tipo: deporte, cultura, ...
+
+select * from actividades;
+
+select * 
+from EstudiantesActividades;
+-- R/ 2684 filas unicamente.alter
+
+
+
+    
+    
+
+
+
+ 
+    
 
 
 
