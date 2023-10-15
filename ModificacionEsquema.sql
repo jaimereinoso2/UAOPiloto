@@ -368,10 +368,43 @@ order by definitiva, definitiva_alf;
  -- Antes de iniciar, creé la tabla actividades con el nobmre de la actividad y su tipo: deporte, cultura, ...
 
 select * from actividades;
+-- R/ 88 filas
 
 select * 
 from EstudiantesActividades;
 -- R/ 2684 filas unicamente.alter
+
+-- la fecha viene en formato TEXT y hay que convertirla a DATE
+-- los primeros 8 caracteres son dd/mm/yy
+
+select distinct str_to_date(substring(fecha_asistencia, 1,8),'%d/%m/%y')
+from estudiantesactividades
+order by 1;
+
+--   EDAD DOCENTES
+-- en DocentesEstudios está la fecha de nacimiento del docente.  veamos si existe solo una fila por cada docente
+
+-- veamos cuántas filas hay 
+select count(*)
+from docentesestudios;
+-- R/ 121
+
+-- veamos si hay repetidos por cédula
+select emp_cedula, count(*)
+from docentesestudios
+group by emp_cedula
+having count(*) > 1;
+-- R/ hay dos casos con 2 filas unicamente.  16692463 y 80200393
+
+-- creamos la tabla docentes (cedula, fecha_nacimiento, genero)
+drop table docentes;
+
+create table docentes as
+select distinct emp_cedula cedula, naci fecha_nacimiento, emp_sexo genero
+from docentesestudios;
+
+select * from docentes;
+-- R/ 119 filas creadas
 
 
 
