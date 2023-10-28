@@ -11,6 +11,11 @@ CHANGE COLUMN `CODIGO` `ID_ESTUDIANTE` BIGINT NULL DEFAULT NULL ;
 select distinct periodo
 from estudiantesmatriculas
 where (periodo like '%4' or periodo like '%2');
+-- R/ 202104 y 2022-02 y 2023-02.  
+
+-- 2.1. encontré 
+select distinct periodo
+from estudianteasignatura;
 
 select *
 from EstudiantesMatriculas
@@ -147,18 +152,18 @@ order by codigo;
 
 -- la adicionamos FECHA_GRADO_COLEGIO a estudiantes_limpio.  
 -- ERROR, fechas erroenas.  convierto a VARCHAR
+
+ALTER TABLE `UAOPiloto`.`estudiantes_limpio` 
+CHANGE COLUMN `fecha_grado_colegio` `fecha_grado_colegio` TEXT NULL DEFAULT NULL ;
+
 update estudiantes_limpio el
 set el.fecha_grado_colegio = 
    (select distinct e.fecha_grado_colegio
     from estudiante e
     where e.codigo = el.id_estudiante
     and e.fecha_grado_colegio is not null);
+
 commit;
-
--- vienen errores de fechas.  convierto la columna a VARCHAR
-ALTER TABLE `UAOPiloto`.`estudiantes_limpio` 
-CHANGE COLUMN `fecha_grado_colegio` `fecha_grado_colegio` VARCHAR(100) NULL DEFAULT NULL ;
-
 
 -- la adicionamos FECHA_ICFES a estudiantes_limpio.  
 update estudiantes_limpio el
@@ -217,29 +222,35 @@ group by definitiva, definitiva_alf;
 -- sacamos las distintas combinaciones de periodo, id_estudiante, cod_asig, definitiva, definitiva_alf
 -- y luego miramos cuales están repetidas más de una vez.
 
+drop table temp;
+
 create table temp as
 select periodo, id_estudiante, cod_asig, count(*) cuantos
 from (
-select distinct periodo, id_estudiante, cod_asig, definitiva, definitiva_alf
-from EstudianteAsignatura) v
+	select distinct periodo, id_estudiante, cod_asig, definitiva, definitiva_alf
+	from EstudianteAsignatura) v
 group by periodo, id_estudiante, cod_asig
 having count(*) > 1;
 
--- Resulta que son muy pocas!!!   solo 8 casos!!!
+-- Resulta que son  43 casos!!!
+select * 
+from temp
+order by id_estudiante, periodo, cod_asig;
 
--- asegurémonos que son detectables.
-select *
+-- veamos qué notas traen a ver si es solo problema de nota y nota nula 
+-- o si efectivamente vienen con notas distintas por grupo
+select id_estudiante, periodo, cod_asig, grupo, definitiva, definitiva_alf
 from estudianteasignatura
 where (periodo, id_estudiante, cod_asig) in 
 (
 	select periodo, id_estudiante, cod_asig
 	from temp
 )
-order by periodo, id_estudiante, cod_asig, definitiva;
+order by periodo, id_estudiante, cod_asig, grupo, definitiva, definitiva_alf;
+-- R/ SON 90 CASOS
 
+-- en la mayoría de los casos ocurre que son dos filas identicas, unas con nota y otras nulas.
 -- PROCEDEMOS A BORRAR ESAS FILAS
--- nota:  envío email a erik con la informacion anterior pues los casos de error 
--- es porque aparece el mismo estudiante, asignatura y periodo cancelada y no cancelada con nota.
 delete from estudianteasignatura
 where (periodo, id_estudiante, cod_asig) in 
  (select periodo, id_estudiante, cod_asig
@@ -248,52 +259,65 @@ where (periodo, id_estudiante, cod_asig) in
 and definitiva is null;
 commit;
 
--- -- verifiquemos que la combinación periodo, estudiante, cod_asig no aparecen con distinta nota, incluso si la nota es nula.
-select periodo, id_estudiante, cod_asig, ifnull(definitiva,-1), count(*)
-from estudianteasignatura
-group by periodo, id_estudiante, cod_asig, ifnull(definitiva,-1)
-having count(*) > 1;
--- R/ ENCONTRAMOS QUE SOLO OCURRE NULL EN EL 202303 que es el período actual, lo cual es correcto.
+-- Revisemos cómo vamos con esto de las notas duplicadas.  Ya eliminamos casos en donde aparecen dos filas, una con nota y otra con nota nula.
+-- Veamos qué quedó.  VOLVEMOS A CREAR TEMP
+drop table temp;
 
--- veamos un caso particular.
-select * from EstudianteAsignatura
-where periodo = 201801 
-and id_estudiante = 2147567
-and cod_asig = 211287;
--- R/ efectivamente, aparece la misma nota, con 3 profesores distintos
---  IDEA, estudianteasignatura debería transformarse en 3 tablas: 
--- 		estudianteasignatura: una concentrada en periodo, id_estudiante, cod_asig como pk
---      EA_grupo:   periodo, id_estudiante, cod_asig, grupo como pk
---      EA_grupo:  periodo, id_estudiante, cod_asig, grupo, cedula;
-
--- verifiquemos que la combinación periodo, estudiante, cod_asig no aparecen con distinta nota, incluso si la nota es nula.
-select periodo, id_estudiante, cod_asig, count(*)
+create table temp as
+select periodo, id_estudiante, cod_asig, count(*) cuantos
 from (
-select periodo, id_estudiante, cod_asig, ifnull(definitiva,-1), count(*)
-from estudianteasignatura
-group by periodo, id_estudiante, cod_asig, ifnull(definitiva,-1)
-having count(*) > 1) v
+	select distinct periodo, id_estudiante, cod_asig, definitiva, definitiva_alf
+	from EstudianteAsignatura) v
 group by periodo, id_estudiante, cod_asig
 having count(*) > 1;
--- R/ efectivamente, este query NO RETORNA FILAS, o sea, no tenemos inconsistencias en las notas para periodo, id_estudiante, cod_asig
 
--- RENOMBRAMOS estudianteasignatura a estudianteasignatura_old2
+-- y volvemos a verificar
+select id_estudiante, periodo, cod_asig, grupo, definitiva, definitiva_alf
+from estudianteasignatura
+where (periodo, id_estudiante, cod_asig) in 
+(
+	select periodo, id_estudiante, cod_asig
+	from temp
+)
+order by periodo, id_estudiante, cod_asig, grupo, definitiva, definitiva_alf;
+
+-- R/ YA NO SALIERON FILAS.  RESUELTO EL LIO.  CADA ASIGNATURA TIENE UNA SOLA NOTA
+
+
+-- verifiquemos que dad auna fila en estudiante asignatura tomando en cuenta (periodo, id_estudiante, cod_asig, definitiva)
+-- NO EXISTA otra fila con igual periodo, id_estudiante, cod_asig y distinta definitiva
+
+select periodo, id_estudiante, cod_asig, definitiva
+from estudianteasignatura ea1
+where exists (
+	select 'x'
+    from estudianteasignatura ea2
+    where ea2.periodo = ea1.periodo
+    and ea2.id_estudiante = ea1.id_estudiante
+    and ea2.cod_asig = ea1.cod_asig
+    and ifnull(ea2.definitiva, -1) != ifnull(ea1.definitiva,-1)
+    );
+    
+-- R/ NINGUN CASO!!!  ESTO CONFIRMA QUE LA NOTA DE UNA ASIGNATURA ES ÚNICA, ASI TENGA MUCHOS GRUPOS.  
+-- NO OCURRE QUE EN UNA ASIGANTURA, CADA GRUPO PUEDA TENER DISTINTA NOTA
+
+-- RENOMBRAMOS estudianteasignatura a estudianteasignatura_old
 ALTER TABLE `UAOPiloto`.`EstudianteAsignatura` 
-RENAME TO  `UAOPiloto`.`EstudianteAsignatura_old2` ;
+RENAME TO  `UAOPiloto`.`EstudianteAsignatura_old` ;
 
 -- creamos la nueva estudiante asignatura con un distinct
 create table estudianteasignatura
 select distinct periodo, id_estudiante, cod_dep, cod_asig, creditos, definitiva, definitiva_alf, cancelada_vol, cancelada_UAO, perdida_inasistencia, perdida, ganada
-from estudianteasignatura_old2;
+from estudianteasignatura_old;
 
 -- comparemos resultados
 select count(*) 
-from estudianteasignatura_old2;
--- R/7288
+from estudianteasignatura_old;
+-- R/10954
 
 select count(*) 
 from estudianteasignatura;
--- 5607.
+-- 9119.
 
 -- confirmemos que no tengamos duplicados en estudiante asignatura al mirar periodo, id_estudiante, cod_asig.
 select periodo, id_estudiante, cod_asig, count(*)
@@ -303,25 +327,25 @@ having count(*) > 1;
 -- R/ no hay duplicados en periodo, id_estudiante, cod_asig
 
 -- creamos ahora EA_grupo.  no parece tener información interesante, excepto qué grupos tuvo una asignatura
+drop table ea_grupo;
 create table ea_grupo as
 select distinct periodo, id_estudiante, cod_asig, grupo
-from estudianteasignatura_old2;
---  R/6324 filas creadas.
+from estudianteasignatura_old;
+--  R/9837 filas creadas.
 
 -- y ahora creamos EA_docentes
 drop table ea_docentes;
 create table ea_docentes as
-select distinct periodo, id_estudiante, cod_dep, cod_asig, grupo, cedula
-from estudianteasignatura_old2;
--- R/ 7288 filas creadas, que corresponde con lo esperado al contar filas en estudianteasignatura_old2.
+select distinct periodo, id_estudiante, cod_dep, cod_asig, grupo, id_docente
+from estudianteasignatura_old;
+-- R/ 10954 filas creadas, que corresponde con lo esperado al contar filas en estudianteasignatura_old2.
 
 -- y creemos docentes_grupos que indica qué docente dictó quñe grupo
+drop table docentes_grupos;
 create table docentes_grupos as
-select distinct cedula, periodo, cod_asig, grupo
+select distinct id_docente, periodo, cod_asig, grupo
 from ea_docentes;
 
-select count(*)
-from estudianteasignatura_old2;
 
 -- NIVEL_NOTA
 -- si la nota es nula:  NIVEL_NOTA = -1
@@ -335,18 +359,18 @@ ADD COLUMN `nivel_nota` VARCHAR(45) NULL AFTER `ganada`;
 update estudianteasignatura
 set nivel_nota = -1
 where definitiva is null;
--- R/ 588 notas cambiadas
+-- R/ 555 notas cambiadas
 
 update estudianteasignatura
 set nivel_nota = 1
 where definitiva < 3;
--- R/ 129 notas cambiadas
+-- R/ 344 notas cambiadas
 
 update estudianteasignatura
 set nivel_nota = 2
 where definitiva >= 3.0
 and   definitiva < 3.8;
--- R/ 1103 notas cambiadas
+-- R/ 2054 notas cambiadas
 
 update estudianteasignatura
 set nivel_nota = 3
@@ -356,12 +380,13 @@ commit;
 
 
 -- Al comparar lo que se quiere hacer con lo que hay en definitiva_alf se observa que esta ultima solo detecta el nulo según si fue nula, A, P, y R (preguntar qué es eso).
--- y si sí hay nota, detecta solo si es menor a 3 o mayor a 3.
+-- y si sí hay nota, detecta solo si es menor a 3 (NS) o igual o mayor a 3 (SP).
 -- NIVEL_NOTA nos permitirá entender mejor si sacó una muy buena nota, regular o malita, o no tuvo nota.
 select distinct definitiva, definitiva_alf
 from estudianteasignatura
 order by definitiva, definitiva_alf;
 
+-- Ahora verifiquemos la información del icfes
 
  SELECT  id_estudiante, IFNULL(icfes_antiguo,-100) icfes_antiguo, IFNULL(biologia,-100) biologia, IFNULL(matematica,-100) matematica, 
 			IFNULL(filosofia,-100) filosofia, 
@@ -372,13 +397,15 @@ order by definitiva, definitiva_alf;
  -- CURSOS EXTRACURRICULARES (EstudiantesActividadeS=
  -- esa tabla usa es la identificación del estudiante y no su codigo, parece.
  -- Antes de iniciar, creé la tabla actividades con el nobmre de la actividad y su tipo: deporte, cultura, ...
+ -- Esta la hice a mano verificando la información que había en EsudiantesActividades y creando un tipo que premite saber si hizo deporte, cultura u otro.
 
 select * from actividades;
--- R/ 88 filas
+-- R/ 88 filas.   
 
+-- EstudiantesActividades son las actividades que los estudiantes realmente tomaron
 select * 
 from EstudiantesActividades;
--- R/ 2684 filas unicamente.alter
+-- R/ 3283 filas unicamente.
 
 -- la fecha viene en formato TEXT y hay que convertirla a DATE
 -- los primeros 8 caracteres son dd/mm/yy
@@ -393,7 +420,7 @@ order by 1;
 -- veamos cuántas filas hay 
 select count(*)
 from docentesestudios;
--- R/ 121
+-- R/ 121.  Es muy poca infomración.
 
 -- veamos si hay repetidos por cédula
 select emp_cedula, count(*)
@@ -419,7 +446,66 @@ from estudiante;
 -- AHORA VAMOS A TRABAJAR CON NOTA por asignatura (como lo hice en javeriana)
 select distinct cod_dep
 from estudianteasignatura;
+-- son en total 23 departamentos y un NULO.
 
+-- confirmemos ese NULO.
+select *
+from estudianteasignatura
+where cod_dep is null;
+-- R/ son 9 filas únicamente, y corresponden al codÑasig 212221.
+-- Veamos qué departamento aparece para ese codigo de asignatura en otras filas.
+
+select distinct cod_dep
+from estudianteasignatura
+where cod_asig = 212221;
+-- R/ DDA.
+
+-- vamos a hacer un update para corregir esto
+UPDATE estudianteasignatura
+set cod_dep = 'DDA'
+where cod_dep is null;
+-- se actualizaron las 9 filas.
+
+commit;
+
+-- encuentro de todas formas definitiva NULA.  
+-- Veamos si lo que pasa es que hay otra fila de la misma asig con nota distinta a nula
+
+select id_estudiante, periodo, cod_asig, definitiva
+from estudianteasignatura ea1
+where exists (
+   select 'x'
+   from estudianteasignatura ea2
+   where ea2.id_estudiante = ea1.id_estudiante
+   and ea2.periodo = ea1.periodo
+   and ea2.cod_asig = ea1.cod_asig
+   and ea2.definitiva is null);
+   
+-- R/ hay 555 casos..  veamos cuantos tienen que ver con que se canceló la asigantura
+select id_estudiante, periodo, cod_asig, definitiva
+from estudianteasignatura ea1
+where definitiva is null
+and (cancelada_vol = 'S' or cancelada_UAO = 'S');
+-- R/ 37 casos corresponden a que la asignatura fue cancelada de forma voluntaria o por la UAO.  ¿y el resto?
+
+-- para evitar problemas, voy a quitar las notas nulas, excepto si fueron canceladas.
+delete from estudianteasignatura 
+where definitiva is null
+and (cancelada_vol != 'S' and cancelada_UAO != 'S');
+-- 518 borradas
+commit;
+
+-- verifiquemos qué fue lo que quedó con nulo en definitiva
+select id_estudiante, periodo, cod_asig, definitiva, cancelada_vol, cancelada_UAO
+from estudianteasignatura ea1
+where definitiva is null;
+
+-- R/ efectivamente, son 37 casos en que o el estudiante canceló o fue la UAO.   ahi si es consistente nota nula con eso.
+
+
+
+-- YA NO HAY NULOS EN COD_DEP.
+-- Miremos si aún hay casos de nulos.
 SELECT ea.id_estudiante, ea.periodo, ea2.cod_dep, min(ea2.definitiva) min_definitiva, 
                                                   max(ea2.definitiva) max_definitiva, 
                                                   avg(ea2.definitiva) avg_definitiva,
@@ -427,7 +513,10 @@ SELECT ea.id_estudiante, ea.periodo, ea2.cod_dep, min(ea2.definitiva) min_defini
 FROM estudianteasignatura ea, estudianteasignatura ea2
 WHERE ea.id_estudiante = ea2.id_estudiante
 AND   ea.periodo > ea2.periodo
-GROUP BY ea.id_estudiante, ea.periodo, ea2.cod_dep;
+AND (ea2.cancelada_vol = 'N' and ea2.cancelada_UAO = 'N')  -- sin tomar en cuenta canceladas
+GROUP BY ea.id_estudiante, ea.periodo, ea2.cod_dep
+having min_definitiva is null;
+-- R/ CERO!!!..  muy bien.
 
 
 --  VUELVO A REVISAR ESTUDIANTEASIGNATURA_OLD porque ERIK sostiene que la nota va por grupo
